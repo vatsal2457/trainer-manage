@@ -2,6 +2,37 @@ import { Request, Response } from 'express';
 import { Trainer } from '../models/Trainer';
 import { User } from '../models/User';
 import { validationResult } from 'express-validator';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
+import bcrypt from 'bcrypt';
+
+// Configure multer for file upload
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, 'uploads/');
+  },
+  filename: function (req, file, cb) {
+    cb(null, Date.now() + path.extname(file.originalname));
+  }
+});
+
+const upload = multer({ 
+  storage: storage,
+  limits: {
+    fileSize: 5 * 1024 * 1024 // 5MB limit
+  },
+  fileFilter: (req, file, cb) => {
+    const filetypes = /pdf|doc|docx/;
+    const extname = filetypes.test(path.extname(file.originalname).toLowerCase());
+    const mimetype = filetypes.test(file.mimetype);
+    if (extname && mimetype) {
+      return cb(null, true);
+    } else {
+      cb(new Error('Only PDF, DOC, and DOCX files are allowed!'));
+    }
+  }
+});
 
 // Get all trainers
 export const getAllTrainers = async (req: Request, res: Response) => {
@@ -38,51 +69,120 @@ export const getTrainer = async (req: Request, res: Response) => {
 // Create trainer
 export const createTrainer = async (req: Request, res: Response) => {
   try {
+    console.log('Received request body:', req.body);
+    console.log('Received file:', req.file);
+
+    // Validate request data
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
+      console.log('Validation errors:', errors.array());
+      return res.status(400).json({ 
+        message: 'Validation failed',
+        errors: errors.array() 
+      });
     }
 
-    const {
-      userId,
-      skills,
-      experience,
-      bio,
-      hourlyRate,
-      availability
-    } = req.body;
-
-    // Check if user exists and is a trainer
-    const user = await User.findById(userId);
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' });
+    // Check if user already exists
+    const existingUser = await User.findOne({ email: req.body.email.toLowerCase() });
+    if (existingUser) {
+      return res.status(400).json({ 
+        message: 'User with this email already exists',
+        field: 'email'
+      });
     }
 
-    if (user.role !== 'trainer') {
-      return res.status(400).json({ message: 'User is not a trainer' });
-    }
-
-    // Check if trainer profile already exists
-    const existingTrainer = await Trainer.findOne({ userId });
+    // Check if trainer already exists
+    const existingTrainer = await Trainer.findOne({ email: req.body.email.toLowerCase() });
     if (existingTrainer) {
-      return res.status(400).json({ message: 'Trainer profile already exists' });
+      return res.status(400).json({ 
+        message: 'Trainer with this email already exists',
+        field: 'email'
+      });
     }
 
-    const trainer = new Trainer({
-      userId,
-      skills,
-      experience,
-      bio,
-      hourlyRate,
-      availability
+    // Split name into firstName and lastName
+    const nameParts = req.body.name.split(' ');
+    const firstName = nameParts[0];
+    const lastName = nameParts.slice(1).join(' ') || firstName;
+
+    // Create user account with default password
+    const defaultPassword = 'Trainer@123';
+    const hashedPassword = await bcrypt.hash(defaultPassword, 10);
+    
+    const user = await User.create({
+      firstName,
+      lastName,
+      email: req.body.email.toLowerCase(),
+      password: hashedPassword,
+      role: 'trainer'
     });
 
-    await trainer.save();
+    console.log('Created user:', user);
 
-    res.status(201).json(trainer);
-  } catch (error) {
-    console.error('Create trainer error:', error);
-    res.status(500).json({ message: 'Server error' });
+    // Handle file upload
+    let resumePath = '';
+    if (req.file) {
+      resumePath = req.file.filename;
+      console.log('Resume path:', resumePath);
+    }
+
+    // Parse and validate numeric fields
+    const passingYear = Math.max(1900, Math.min(new Date().getFullYear(), parseInt(req.body.passingYear) || 0));
+    const teachingExperience = Math.max(0, parseInt(req.body.teachingExperience) || 0);
+    const developmentExperience = Math.max(0, parseInt(req.body.developmentExperience) || 0);
+    const totalExperience = Math.max(0, parseInt(req.body.totalExperience) || 0);
+    const payoutExpectation = Math.max(0, parseInt(req.body.payoutExpectation) || 0);
+
+    // Create trainer profile
+    const trainerData = {
+      userId: user._id,
+      name: req.body.name,
+      email: req.body.email.toLowerCase(),
+      phoneNo: req.body.phoneNo,
+      qualification: req.body.qualification,
+      passingYear,
+      expertise: req.body.expertise,
+      teachingExperience,
+      developmentExperience,
+      totalExperience,
+      feasibleTime: req.body.feasibleTime,
+      payoutExpectation,
+      location: req.body.location,
+      remarks: req.body.remarks,
+      resume: resumePath,
+      status: 'active'
+    };
+
+    console.log('Creating trainer with data:', trainerData);
+
+    const trainer = await Trainer.create(trainerData);
+    console.log('Created trainer:', trainer);
+
+    res.status(201).json({
+      message: 'Trainer created successfully',
+      trainer: {
+        ...trainer.toObject(),
+        createdAt: trainer.createdAt,
+        updatedAt: trainer.updatedAt
+      }
+    });
+  } catch (error: any) {
+    console.error('Error in createTrainer:', error);
+    console.error('Error stack:', error.stack);
+
+    // If there's an error and a file was uploaded, delete it
+    if (req.file) {
+      const filePath = path.join(__dirname, '../uploads', req.file.filename);
+      fs.unlink(filePath, (err) => {
+        if (err) console.error('Error deleting file:', err);
+      });
+    }
+
+    res.status(500).json({
+      message: 'Server error',
+      error: error.message,
+      details: error.stack
+    });
   }
 };
 

@@ -3,22 +3,21 @@ import { IUser } from './User';
 
 export interface ITrainer extends Document {
   userId: IUser['_id'];
-  skills: string[];
-  experience: number;
-  documents: {
-    type: string;
-    url: string;
-  }[];
-  availability: {
-    day: string;
-    slots: string[];
-  }[];
-  rating: number;
-  status: 'available' | 'busy' | 'offline';
-  bio: string;
-  hourlyRate: number;
-  totalSessions: number;
-  completedSessions: number;
+  name: string;
+  email: string;
+  phoneNo: string;
+  qualification: string;
+  passingYear: number;
+  expertise: string;
+  teachingExperience: number;
+  developmentExperience: number;
+  totalExperience: number;
+  feasibleTime: string;
+  payoutExpectation: number;
+  location: string;
+  remarks: string;
+  resume: string;
+  status: 'active' | 'inactive';
   createdAt: Date;
   updatedAt: Date;
 }
@@ -29,73 +28,92 @@ const trainerSchema = new Schema<ITrainer>({
     ref: 'User',
     required: true
   },
-  skills: [{
+  name: {
     type: String,
-    required: true
-  }],
-  experience: {
+    required: true,
+    trim: true
+  },
+  email: {
+    type: String,
+    required: true,
+    unique: true,
+    trim: true,
+    lowercase: true
+  },
+  phoneNo: {
+    type: String,
+    required: true,
+    trim: true
+  },
+  qualification: {
+    type: String,
+    required: true,
+    trim: true
+  },
+  passingYear: {
+    type: Number,
+    required: true,
+    min: 1900,
+    max: new Date().getFullYear()
+  },
+  expertise: {
+    type: String,
+    required: true,
+    trim: true
+  },
+  teachingExperience: {
     type: Number,
     required: true,
     min: 0
   },
-  documents: [{
-    type: {
-      type: String,
-      required: true
-    },
-    url: {
-      type: String,
-      required: true
-    }
-  }],
-  availability: [{
-    day: {
-      type: String,
-      required: true,
-      enum: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-    },
-    slots: [{
-      type: String,
-      required: true
-    }]
-  }],
-  rating: {
+  developmentExperience: {
     type: Number,
-    default: 0,
-    min: 0,
-    max: 5
+    required: true,
+    min: 0
+  },
+  totalExperience: {
+    type: Number,
+    required: true,
+    min: 0
+  },
+  feasibleTime: {
+    type: String,
+    required: true,
+    trim: true
+  },
+  payoutExpectation: {
+    type: Number,
+    required: true,
+    min: 0
+  },
+  location: {
+    type: String,
+    required: true,
+    trim: true
+  },
+  remarks: {
+    type: String,
+    required: true,
+    trim: true,
+    maxlength: 500
+  },
+  resume: {
+    type: String,
+    required: true
   },
   status: {
     type: String,
-    enum: ['available', 'busy', 'offline'],
-    default: 'offline'
-  },
-  bio: {
-    type: String,
-    required: true,
-    maxlength: 500
-  },
-  hourlyRate: {
-    type: Number,
-    required: true,
-    min: 0
-  },
-  totalSessions: {
-    type: Number,
-    default: 0
-  },
-  completedSessions: {
-    type: Number,
-    default: 0
+    enum: ['active', 'inactive'],
+    default: 'active'
   }
 }, {
   timestamps: true
 });
 
-// Index for searching trainers by skills
-trainerSchema.index({ skills: 1 });
-
-// Index for searching trainers by availability
-trainerSchema.index({ 'availability.day': 1, 'availability.slots': 1 });
+// Indexes for better query performance
+trainerSchema.index({ email: 1 });
+trainerSchema.index({ location: 1 });
+trainerSchema.index({ expertise: 1 });
+trainerSchema.index({ status: 1 });
 
 export const Trainer = mongoose.model<ITrainer>('Trainer', trainerSchema); 

@@ -6,6 +6,8 @@ import morgan from 'morgan';
 import dotenv from 'dotenv';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
+import path from 'path';
+import fs from 'fs';
 
 // Import routes
 import authRoutes from './routes/authRoutes';
@@ -20,10 +22,16 @@ const app = express();
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
   cors: {
-    origin: process.env.NODE_ENV === 'production' ? 'your-production-url' : 'http://localhost:3000',
+    origin: process.env.NODE_ENV === 'production' ? 'https://trainer-management-system-frontend.onrender.com' : 'http://localhost:3000',
     methods: ['GET', 'POST']
   }
 });
+
+// Ensure uploads directory exists
+const uploadsDir = path.join(__dirname, '../uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
 
 // Middleware
 app.use(cors());
@@ -31,9 +39,11 @@ app.use(helmet());
 app.use(morgan('dev'));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 // Database connection
-mongoose.connect(process.env.MONGODB_URI!)
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/trainer-management';
+mongoose.connect(MONGODB_URI)
   .then(() => {
     console.log('Connected to MongoDB');
   })
@@ -63,7 +73,10 @@ app.get('/', (req, res) => {
 // Error handling middleware
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
   console.error(err.stack);
-  res.status(500).json({ message: 'Something went wrong!' });
+  res.status(500).json({
+    message: 'Something went wrong!',
+    error: err.message
+  });
 });
 
 // 404 handler
